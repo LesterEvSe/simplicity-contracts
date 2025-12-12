@@ -1,0 +1,28 @@
+fn hash_unlimited_storage(elem: u8, pair: (Ctx8, u16)) -> (Ctx8, u16) {
+    let (ctx, i): (Ctx8, u16) = pair;
+
+    match jet::eq_16(i, 5) {
+        true => {
+            (ctx, i)
+        },
+        false => {
+            let (_, val): (bool, u16) = jet::add_16(i, 1);
+            (
+                jet::sha_256_ctx_8_add_1(ctx, elem),
+                val,
+            )
+        }
+    }
+}
+
+fn main() {
+    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
+    let storage: [u8; 15] = witness::STORAGE;
+    
+    let (ctx, _): (Ctx8,u16) = array_fold::<hash_unlimited_storage, 15>(storage, (ctx, 0));
+    let computed: u256 = jet::sha_256_ctx_8_finalize(ctx);
+    // assert!(jet::eq_256(
+    //     jet::sha_256_ctx_8_finalize(ctx),
+    //     unwrap(jet::input_script_hash(jet::current_index()))
+    // ));
+}
