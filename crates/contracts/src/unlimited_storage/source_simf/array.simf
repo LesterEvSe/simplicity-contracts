@@ -16,6 +16,11 @@ fn hash_unlimited_storage(elem: u8, pair: (Ctx8, u16)) -> (Ctx8, u16) {
 }
 
 fn main() {
+    assert!(jet::eq_256(
+        unwrap(jet::input_script_hash(jet::current_index())),
+        unwrap(jet::output_script_hash(jet::current_index()))
+    ));
+
     let tap_leaf: u256 = jet::tapleaf_hash();
     let ctx: Ctx8 = jet::tapdata_init();
     let storage: [u8; 10000] = witness::STORAGE;
