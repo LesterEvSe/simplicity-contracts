@@ -8,7 +8,7 @@ use simplicityhl::simplicity::elements::{Script, Transaction};
 use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use simplicityhl::simplicity::{Cmr, RedeemNode, leaf_version};
 use simplicityhl::simplicity::elements::hashes::HashEngine as _;
-use simplicityhl::{CompiledProgram, TemplateProgram, WitnessValues};
+use simplicityhl::{CompiledProgram, TemplateProgram};
 use simplicityhl_core::{RunnerLogLevel, run_program};
 
 mod build_arguments;
@@ -52,7 +52,17 @@ pub fn execute_unlimited_storage_program(
     env: &ElementsEnv<Arc<Transaction>>,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
     let witness_values = build_unlimited_storage_witness(storage);
-    Ok(run_program(compiled_program, witness_values, env, RunnerLogLevel::Trace)?.0)
+    Ok(run_program(compiled_program, witness_values, env, RunnerLogLevel::None)?.0)
+}
+
+/// The unspendable internal key specified in BIP-0341.
+#[rustfmt::skip] // mangles byte vectors
+pub fn unspendable_internal_key() -> secp256k1::XOnlyPublicKey {
+	secp256k1::XOnlyPublicKey::from_slice(&[
+		0x50, 0x92, 0x9b, 0x74, 0xc1, 0xa0, 0x49, 0x54, 0xb7, 0x8b, 0x4b, 0x60, 0x35, 0xe9, 0x7a, 0x5e,
+		0x07, 0x8a, 0x5a, 0x0f, 0x28, 0xec, 0x96, 0xd5, 0x47, 0xbf, 0xee, 0x9a, 0xce, 0x80, 0x3a, 0xc0, 
+	])
+	.expect("key should be valid")
 }
 
 fn script_ver(cmr: Cmr) -> (Script, LeafVersion) {
@@ -113,21 +123,24 @@ mod unlimited_storage_tests {
         let program = get_unlimited_storage_compiled_program(&unlimited_storage_arguments);
         let cmr = program.commit().cmr();
 
-        let internal_key = secp256k1::XOnlyPublicKey::from_slice(&[2u8; 32])?;
-
         let spend_info = taproot_spend_info(
-            internal_key,
+            unspendable_internal_key(),
             &old_storage,
             unlimited_storage_arguments.len as usize,
             cmr
         );
         let script_pubkey = Script::new_v1_p2tr_tweaked(spend_info.output_key());
 
-        // minimal tx
+
         let mut pst = PartiallySignedTransaction::new_v2();
         let outpoint = OutPoint::new(Txid::from_slice(&[0; 32])?, 0);
         pst.add_input(Input::from_prevout(outpoint));
-        pst.add_output(Output::new_explicit(script_pubkey.clone(), 0, AssetId::default(), None));
+        pst.add_output(Output::new_explicit(
+            script_pubkey.clone(),
+            0,
+            AssetId::default(),
+            None
+        ));
 
         let control_block = spend_info
             .control_block(&script_ver(cmr))

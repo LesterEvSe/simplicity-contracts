@@ -10,3 +10,4 @@ pub use dual_currency_deposit::*;
 pub use options::*;
 pub use simple_storage::*;
 pub use cmr_storage::*;
+pub use unlimited_storage::*;

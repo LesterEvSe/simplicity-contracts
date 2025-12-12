@@ -1,7 +1,7 @@
 fn hash_unlimited_storage(elem: u8, pair: (Ctx8, u16)) -> (Ctx8, u16) {
     let (ctx, i): (Ctx8, u16) = pair;
 
-    match jet::eq_16(i, 5) {
+    match jet::eq_16(i, param::LEN) {
         true => {
             (ctx, i)
         },
@@ -16,13 +16,24 @@ fn hash_unlimited_storage(elem: u8, pair: (Ctx8, u16)) -> (Ctx8, u16) {
 }
 
 fn main() {
-    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
-    let storage: [u8; 15] = witness::STORAGE;
+    let tap_leaf: u256 = jet::tapleaf_hash();
+    let ctx: Ctx8 = jet::tapdata_init();
+    let storage: [u8; 10000] = witness::STORAGE;
     
-    let (ctx, _): (Ctx8,u16) = array_fold::<hash_unlimited_storage, 15>(storage, (ctx, 0));
+    let (ctx, _): (Ctx8, u16) = array_fold::<hash_unlimited_storage, 10000>(storage, (ctx, 0));
     let computed: u256 = jet::sha_256_ctx_8_finalize(ctx);
-    // assert!(jet::eq_256(
-    //     jet::sha_256_ctx_8_finalize(ctx),
-    //     unwrap(jet::input_script_hash(jet::current_index()))
-    // ));
+
+    let tap_node: u256 = jet::build_tapbranch(tap_leaf, computed);
+    let bip0341_key: u256 = 0x50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0;
+    let tweaked_key: u256 = jet::build_taptweak(bip0341_key, tap_node);
+    
+    // Turn the taptweak into a script hash
+    let hash_ctx1: Ctx8 = jet::sha_256_ctx_8_init();
+    let hash_ctx2: Ctx8 = jet::sha_256_ctx_8_add_2(hash_ctx1, 0x5120); // Segwit v1, length 32
+    let hash_ctx3: Ctx8 = jet::sha_256_ctx_8_add_32(hash_ctx2, tweaked_key);
+    
+    assert!(jet::eq_256(
+        jet::sha_256_ctx_8_finalize(hash_ctx3),
+        unwrap(jet::input_script_hash(jet::current_index()))
+    ));
 }
