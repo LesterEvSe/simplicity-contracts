@@ -6,7 +6,7 @@ fn hash_unlimited_storage(elem: u8, pair: (Ctx8, u16)) -> (Ctx8, u16) {
             (ctx, i)
         },
         false => {
-            let (_, val): (bool, u16) = jet::add_16(i, 1);
+            let (_, val): (bool, u16) = jet::increment_16(i);
             (
                 jet::sha_256_ctx_8_add_1(ctx, elem),
                 val,
