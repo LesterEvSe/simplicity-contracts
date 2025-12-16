@@ -57,7 +57,15 @@ pub fn execute_unlimited_storage_program(
 }
 
 /// The unspendable internal key specified in BIP-0341.
+///
+/// # Panics
+///
+/// This function **panics** if the hard-coded 32-byte slice is not a valid
+/// x-only public key. The panic originates from
+/// `secp256k1::XOnlyPublicKey::from_slice(...).expect(...)`.
+/// The unspendable internal key specified in BIP-0341.
 #[rustfmt::skip] // mangles byte vectors
+#[must_use]
 pub fn unspendable_internal_key() -> secp256k1::XOnlyPublicKey {
 	secp256k1::XOnlyPublicKey::from_slice(&[
 		0x50, 0x92, 0x9b, 0x74, 0xc1, 0xa0, 0x49, 0x54, 0xb7, 0x8b, 0x4b, 0x60, 0x35, 0xe9, 0x7a, 0x5e,
@@ -72,6 +80,14 @@ fn script_ver(cmr: Cmr) -> (Script, LeafVersion) {
 
 /// Given a Simplicity CMR and an internal key, computes the [`TaprootSpendInfo`]
 /// for a Taptree with this CMR as its single leaf.
+///
+/// # Panics
+///
+/// This function **panics** if building the taproot tree fails (the calls to
+/// `TaprootBuilder::add_leaf_with_ver` or `.add_hidden` return `Err`) or if
+/// finalizing the builder fails. Those panics come from the `.expect(...)`
+/// calls on the builder methods.
+#[must_use]
 pub fn taproot_spend_info(
     internal_key: secp256k1::XOnlyPublicKey,
     storage: &[u8; MAX_VAL],
