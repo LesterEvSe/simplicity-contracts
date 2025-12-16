@@ -8,23 +8,24 @@ use simplicityhl::simplicity::elements::{Script, Transaction};
 use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use simplicityhl::simplicity::{Cmr, RedeemNode, leaf_version};
 use simplicityhl::simplicity::elements::hashes::HashEngine as _;
-use simplicityhl::{CompiledProgram, TemplateProgram, WitnessValues};
+use simplicityhl::{CompiledProgram, TemplateProgram};
 use simplicityhl_core::{RunnerLogLevel, run_program};
 
-
 mod build_arguments;
+mod build_witness;
 
-pub use build_arguments::{StorageArguments, build_storage_arguments};
+pub use build_arguments::{UnlimitedStorageArguments, build_unlimited_storage_arguments};
+pub use build_witness::{MAX_VAL, build_unlimited_storage_witness};
 
-pub const SIMPLE_STORAGE_SOURCE: &str = include_str!("source_simf/unlimited_storage.simf");
+pub const UNLIMITED_STORAGE_SOURCE: &str = include_str!("source_simf/array.simf");
 
 /// Get the storage template program for instantiation.
 ///
 /// # Panics
 /// Panics if the embedded source fails to compile (should never happen).
 #[must_use]
-pub fn get_storage_template_program() -> TemplateProgram {
-    TemplateProgram::new(SIMPLE_STORAGE_SOURCE)
+pub fn get_unlimited_storage_template_program() -> TemplateProgram {
+    TemplateProgram::new(UNLIMITED_STORAGE_SOURCE)
         .expect("INTERNAL: expected to compile successfully.")
 }
 
@@ -33,11 +34,11 @@ pub fn get_storage_template_program() -> TemplateProgram {
 /// # Panics
 /// Panics if program instantiation fails.
 #[must_use]
-pub fn get_cmr_storage_compiled_program() -> CompiledProgram {
-    let program = get_storage_template_program();
+pub fn get_unlimited_storage_compiled_program(args: &UnlimitedStorageArguments) -> CompiledProgram {
+    let program = get_unlimited_storage_template_program();
 
     program
-        .instantiate(simplicityhl::Arguments::default(), true)
+        .instantiate(build_unlimited_storage_arguments(args), true)
         .unwrap()
 }
 
@@ -45,13 +46,13 @@ pub fn get_cmr_storage_compiled_program() -> CompiledProgram {
 ///
 /// # Errors
 /// Returns error if program execution fails.
-pub fn execute_cmr_storage_program(
-    state: [u8; 32],
+pub fn execute_unlimited_storage_program(
+    storage: [u8; MAX_VAL],
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
-    // let witness_values = build_cmr_storage_witness(state);
-    Ok(run_program(compiled_program, WitnessValues::default(), env, RunnerLogLevel::Trace)?.0)
+    let witness_values = build_unlimited_storage_witness(storage);
+    Ok(run_program(compiled_program, witness_values, env, RunnerLogLevel::None)?.0)
 }
 
 /// The unspendable internal key specified in BIP-0341.
@@ -72,7 +73,8 @@ fn script_ver(cmr: Cmr) -> (Script, LeafVersion) {
 /// for a Taptree with this CMR as its single leaf.
 pub fn taproot_spend_info(
     internal_key: secp256k1::XOnlyPublicKey,
-    state: [u8; 32],
+    storage: &[u8; MAX_VAL],
+    len: usize,
     cmr: Cmr,
 ) -> TaprootSpendInfo {
     let (script, version) = script_ver(cmr);
@@ -82,14 +84,14 @@ pub fn taproot_spend_info(
     let mut eng = sha256::Hash::engine();
     eng.input(tag.as_byte_array());
     eng.input(tag.as_byte_array());
-    eng.input(&state);
-    let state_hash = sha256::Hash::from_engine(eng);
+    eng.input(&storage[..len]);
+    let storage_hash = sha256::Hash::from_engine(eng);
 
     // Build taproot tree with hidden leaf
     let builder = TaprootBuilder::new()
         .add_leaf_with_ver(1, script, version)
         .expect("tap tree should be valid")
-        .add_hidden(1, state_hash)
+        .add_hidden(1, storage_hash)
         .expect("tap tree should be valid");
 
     builder
@@ -105,63 +107,61 @@ mod unlimited_storage_tests {
 
     use simplicityhl::elements::confidential::{Asset, Value};
     use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-    use simplicityhl::elements::{self, AssetId, OutPoint, Script, Txid};
+    use simplicityhl::elements::{AssetId, BlockHash, OutPoint, Script, Txid};
     use simplicityhl::simplicity::elements::taproot::ControlBlock;
-    use simplicityhl::simplicity::jet::elements::ElementsEnv;
+    use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 
     #[test]
     fn test_unlimited_storage_mint_path() -> Result<()> {
-        let old_state: [u8; 32] = [0u8; 32];
+        let mut old_storage = [0u8; MAX_VAL];
+        old_storage[3] = 0xff;
 
-        // Calculate new_state
-        // NOTE: Our example can be done with the line new_state[31] = 1
-        let mut new_state = old_state.clone();
-        let mut val = u64::from_be_bytes(new_state[24..].try_into().unwrap());
-        val += 1;
-        new_state[24..].copy_from_slice(&val.to_be_bytes());
+        let unlimited_storage_arguments = UnlimitedStorageArguments {
+            len: 5,
+        };
 
-        let program = get_cmr_storage_compiled_program();
+        let program = get_unlimited_storage_compiled_program(&unlimited_storage_arguments);
         let cmr = program.commit().cmr();
 
-        let old_spend_info = taproot_spend_info(unspendable_internal_key(), old_state, cmr);
-        let old_script_pubkey = Script::new_v1_p2tr_tweaked(old_spend_info.output_key());
+        let spend_info = taproot_spend_info(
+            unspendable_internal_key(),
+            &old_storage,
+            unlimited_storage_arguments.len as usize,
+            cmr
+        );
+        let script_pubkey = Script::new_v1_p2tr_tweaked(spend_info.output_key());
 
-        let new_spend_info = taproot_spend_info(unspendable_internal_key(), new_state, cmr);
-        let new_script_pubkey = Script::new_v1_p2tr_tweaked(new_spend_info.output_key());
 
-        // Build transaction
         let mut pst = PartiallySignedTransaction::new_v2();
-        let outpoint0 = OutPoint::new(Txid::from_slice(&[0; 32])?, 0);
-        pst.add_input(Input::from_prevout(outpoint0));
+        let outpoint = OutPoint::new(Txid::from_slice(&[0; 32])?, 0);
+        pst.add_input(Input::from_prevout(outpoint));
         pst.add_output(Output::new_explicit(
-            new_script_pubkey,
+            script_pubkey.clone(),
             0,
             AssetId::default(),
-            None,
+            None
         ));
 
-
-        let control_block = old_spend_info
+        let control_block = spend_info
             .control_block(&script_ver(cmr))
-            .expect("Must retrieve control block for the script path");
-
-        // Set up environment
+            .expect("must get control block");
+        
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
-            vec![ simplicityhl::simplicity::jet::elements::ElementsUtxo {
-                script_pubkey: old_script_pubkey,
+            vec![ElementsUtxo {
+                script_pubkey,
                 asset: Asset::default(),
                 value: Value::default(),
             }],
             0,
             cmr,
-            ControlBlock::from_slice(&control_block.serialize())?, // Real control block
+            ControlBlock::from_slice(&control_block.serialize())?,
             None,
-            elements::BlockHash::all_zeros(),
+            BlockHash::all_zeros(),
         );
 
         assert!(
-            execute_cmr_storage_program(old_state, &program, &env).is_ok(),
+            execute_unlimited_storage_program(old_storage, &program, &env).is_ok(),
             "expected success mint path"
         );
 
