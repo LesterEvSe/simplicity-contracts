@@ -1,15 +1,16 @@
 use std::sync::Arc;
 
 use simplicityhl::simplicity::bitcoin::secp256k1;
+use simplicityhl::simplicity::elements::hashes::HashEngine as _;
+use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
+use simplicityhl::simplicity::elements::{Script, Transaction};
 use simplicityhl::simplicity::hashes::{Hash, sha256};
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::ElementsEnv;
-use simplicityhl::simplicity::elements::{Script, Transaction};
-use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use simplicityhl::simplicity::{Cmr, RedeemNode, leaf_version};
-use simplicityhl::simplicity::elements::hashes::HashEngine as _;
+use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{CompiledProgram, TemplateProgram};
-use simplicityhl_core::{RunnerLogLevel, run_program};
+use simplicityhl_core::run_program;
 
 mod build_arguments;
 mod build_witness;
@@ -52,7 +53,7 @@ pub fn execute_unlimited_storage_program(
     env: &ElementsEnv<Arc<Transaction>>,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
     let witness_values = build_unlimited_storage_witness(storage);
-    Ok(run_program(compiled_program, witness_values, env, RunnerLogLevel::None)?.0)
+    Ok(run_program(compiled_program, witness_values, env, TrackerLogLevel::None)?.0)
 }
 
 /// The unspendable internal key specified in BIP-0341.
@@ -116,9 +117,7 @@ mod unlimited_storage_tests {
         let mut old_storage = [0u8; MAX_VAL];
         old_storage[3] = 0xff;
 
-        let unlimited_storage_arguments = UnlimitedStorageArguments {
-            len: 5,
-        };
+        let unlimited_storage_arguments = UnlimitedStorageArguments { len: 5 };
 
         let program = get_unlimited_storage_compiled_program(&unlimited_storage_arguments);
         let cmr = program.commit().cmr();
@@ -127,10 +126,9 @@ mod unlimited_storage_tests {
             unspendable_internal_key(),
             &old_storage,
             unlimited_storage_arguments.len as usize,
-            cmr
+            cmr,
         );
         let script_pubkey = Script::new_v1_p2tr_tweaked(spend_info.output_key());
-
 
         let mut pst = PartiallySignedTransaction::new_v2();
         let outpoint = OutPoint::new(Txid::from_slice(&[0; 32])?, 0);
@@ -139,13 +137,13 @@ mod unlimited_storage_tests {
             script_pubkey.clone(),
             0,
             AssetId::default(),
-            None
+            None,
         ));
 
         let control_block = spend_info
             .control_block(&script_ver(cmr))
             .expect("must get control block");
-        
+
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {

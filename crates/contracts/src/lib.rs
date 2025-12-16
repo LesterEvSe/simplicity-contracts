@@ -6,6 +6,8 @@ mod dual_currency_deposit;
 mod options;
 #[cfg(feature = "simple-storage")]
 mod simple_storage;
+#[cfg(feature = "unlimited-storage")]
+mod unlimited_storage;
 
 #[cfg(any(feature = "sdk-basic", feature = "sdk-options"))]
 pub mod sdk;
@@ -15,3 +17,5 @@ pub use dual_currency_deposit::*;
 pub use options::*;
 #[cfg(feature = "simple-storage")]
 pub use simple_storage::*;
+#[cfg(feature = "unlimited-storage")]
+pub use unlimited_storage::*;
