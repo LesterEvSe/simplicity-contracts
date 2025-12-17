@@ -1,4 +1,4 @@
-fn hash_unlimited_storage(elem: u8, pair: (Ctx8, u16)) -> (Ctx8, u16) {
+fn hash_array_tr_storage(elem: u8, pair: (Ctx8, u16)) -> (Ctx8, u16) {
     let (ctx, i): (Ctx8, u16) = pair;
 
     match jet::eq_16(i, param::LEN) {
@@ -25,7 +25,7 @@ fn main() {
     let ctx: Ctx8 = jet::tapdata_init();
     let storage: [u8; 10000] = witness::STORAGE;
     
-    let (ctx, _): (Ctx8, u16) = array_fold::<hash_unlimited_storage, 10000>(storage, (ctx, 0));
+    let (ctx, _): (Ctx8, u16) = array_fold::<hash_array_tr_storage, 10000>(storage, (ctx, 0));
     let computed: u256 = jet::sha_256_ctx_8_finalize(ctx);
 
     let tap_node: u256 = jet::build_tapbranch(tap_leaf, computed);

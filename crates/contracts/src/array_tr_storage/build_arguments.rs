@@ -9,7 +9,7 @@ pub struct UnlimitedStorageArguments {
 
 /// Build Simplicity arguments for storage program.
 #[must_use]
-pub fn build_unlimited_storage_arguments(args: &UnlimitedStorageArguments) -> Arguments {
+pub fn build_array_tr_storage_arguments(args: &UnlimitedStorageArguments) -> Arguments {
     Arguments::from(HashMap::from([(
         WitnessName::from_str_unchecked("LEN"),
         simplicityhl::Value::from(UIntValue::U16(args.len)),

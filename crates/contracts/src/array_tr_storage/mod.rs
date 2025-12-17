@@ -15,31 +15,33 @@ use simplicityhl_core::run_program;
 mod build_arguments;
 mod build_witness;
 
-pub use build_arguments::{UnlimitedStorageArguments, build_unlimited_storage_arguments};
-pub use build_witness::{MAX_VAL, build_unlimited_storage_witness};
+pub use build_arguments::{UnlimitedStorageArguments, build_array_tr_storage_arguments};
+pub use build_witness::{MAX_VAL, build_array_tr_storage_witness};
 
-pub const UNLIMITED_STORAGE_SOURCE: &str = include_str!("source_simf/array.simf");
+pub const ARRAY_TR_STORAGE_SOURCE: &str = include_str!("source_simf/array_tr_storage.simf");
 
 /// Get the storage template program for instantiation.
 ///
 /// # Panics
+///
 /// Panics if the embedded source fails to compile (should never happen).
 #[must_use]
-pub fn get_unlimited_storage_template_program() -> TemplateProgram {
-    TemplateProgram::new(UNLIMITED_STORAGE_SOURCE)
+pub fn get_array_tr_storage_template_program() -> TemplateProgram {
+    TemplateProgram::new(ARRAY_TR_STORAGE_SOURCE)
         .expect("INTERNAL: expected to compile successfully.")
 }
 
 /// Get compiled storage program, panicking on failure.
 ///
 /// # Panics
+///
 /// Panics if program instantiation fails.
 #[must_use]
-pub fn get_unlimited_storage_compiled_program(args: &UnlimitedStorageArguments) -> CompiledProgram {
-    let program = get_unlimited_storage_template_program();
+pub fn get_array_tr_storage_compiled_program(args: &UnlimitedStorageArguments) -> CompiledProgram {
+    let program = get_array_tr_storage_template_program();
 
     program
-        .instantiate(build_unlimited_storage_arguments(args), true)
+        .instantiate(build_array_tr_storage_arguments(args), true)
         .unwrap()
 }
 
@@ -47,12 +49,12 @@ pub fn get_unlimited_storage_compiled_program(args: &UnlimitedStorageArguments) 
 ///
 /// # Errors
 /// Returns error if program execution fails.
-pub fn execute_unlimited_storage_program(
+pub fn execute_array_tr_storage_program(
     storage: [u8; MAX_VAL],
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
-    let witness_values = build_unlimited_storage_witness(storage);
+    let witness_values = build_array_tr_storage_witness(storage);
     Ok(run_program(compiled_program, witness_values, env, TrackerLogLevel::None)?.0)
 }
 
@@ -117,7 +119,7 @@ pub fn taproot_spend_info(
 }
 
 #[cfg(test)]
-mod unlimited_storage_tests {
+mod array_tr_storage_tests {
     use super::*;
     use anyhow::Result;
     use std::sync::Arc;
@@ -129,19 +131,19 @@ mod unlimited_storage_tests {
     use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 
     #[test]
-    fn test_unlimited_storage_mint_path() -> Result<()> {
+    fn test_array_tr_storage_mint_path() -> Result<()> {
         let mut old_storage = [0u8; MAX_VAL];
         old_storage[3] = 0xff;
 
-        let unlimited_storage_arguments = UnlimitedStorageArguments { len: 5 };
+        let array_tr_storage_arguments = UnlimitedStorageArguments { len: 5 };
 
-        let program = get_unlimited_storage_compiled_program(&unlimited_storage_arguments);
+        let program = get_array_tr_storage_compiled_program(&array_tr_storage_arguments);
         let cmr = program.commit().cmr();
 
         let spend_info = taproot_spend_info(
             unspendable_internal_key(),
             &old_storage,
-            unlimited_storage_arguments.len as usize,
+            array_tr_storage_arguments.len as usize,
             cmr,
         );
         let script_pubkey = Script::new_v1_p2tr_tweaked(spend_info.output_key());
@@ -175,7 +177,7 @@ mod unlimited_storage_tests {
         );
 
         assert!(
-            execute_unlimited_storage_program(old_storage, &program, &env).is_ok(),
+            execute_array_tr_storage_program(old_storage, &program, &env).is_ok(),
             "expected success mint path"
         );
 
