@@ -1,3 +1,8 @@
+/* 
+ * The idea is similar to bytes32_tr_storage, but it involves
+ * hashing a significantly larger number of bytes using the array_fold function.
+ */
+
 fn hash_array_tr_storage(elem: u8, pair: (Ctx8, u16)) -> (Ctx8, u16) {
     let (ctx, i): (Ctx8, u16) = pair;
 
